@@ -419,7 +419,10 @@ class CollectedDataCreate(CreateView):
             except DisaggregationLabel.DoesNotExist:
                 getTable = None
             if getTable:
-                count = getTableCount(getTable.url,getTable.table_id)
+                # if there is a trailing slash, remove it since TT api does not like it.
+                url = getTable.url if getTable.url[-1:] != "/" else getTable.url[:-1]
+                url = url if url[-5:] != "/data" else url[:-5]
+                count = getTableCount(url, getTable.table_id)
             else:
                 count = 0
             form.instance.achieved = count
@@ -526,6 +529,7 @@ class CollectedDataUpdate(UpdateView):
             if getTable:
                 # if there is a trailing slash, remove it since TT api does not like it.
                 url = getTable.url if getTable.url[-1:] != "/" else getTable.url[:-1]
+                url = url if url[-5:] != "/data" else url[:-5]
                 count = getTableCount(url, getTable.table_id)
             else:
                 count = 0
@@ -572,24 +576,21 @@ def getTableCount(url,table_id):
     :param table_id: The TolaTable ID to update count from and return
     :return: count : count of rows from TolaTable
     """
-    filter_url = url
+    token = TolaSites.objects.get(site_id=1)
+    if token.tola_tables_token:
+        headers = {'content-type': 'application/json', 'Authorization': 'Token ' + token.tola_tables_token }
+    else:
+        headers = {'content-type': 'application/json'}
+        print "Token Not Found"
 
-    # loop over the result table and count the number of records for actuals
-    actual_data = get_table(filter_url)
-    count = 0
-
-    if actual_data:
-        # check if json data is in the 'data' attribute or at the top level of the JSON object
-        try:
-            looper = actual_data['data']
-        except KeyError:
-            looper = actual_data
-
-        for item in looper:
-            count = count + 1
-
-    # update with new count
-    TolaTable.objects.filter(table_id = table_id).update(unique_count=count)
+    response = requests.get(url,headers=headers, verify=False)
+    data = json.loads(response.content)
+    count = None
+    try:
+        count = data['data_count']
+        TolaTable.objects.filter(table_id = table_id).update(unique_count=count)
+    except KeyError:
+        pass
 
     return count
 
@@ -647,12 +648,12 @@ def collecteddata_import(request):
         countries = getCountry(request.user)
         check_for_existence = TolaTable.objects.all().filter(name=name,owner=owner)
         if check_for_existence:
-            result = "error"
+            result = check_for_existence[0].id
         else:
             create_table = TolaTable.objects.create(name=name,owner=owner,remote_owner=remote_owner,table_id=id,url=url, unique_count=count)
             create_table.country.add(countries[0].id)
             create_table.save()
-            result = "success"
+            result = create_table.id
 
         # send result back as json
         message = result
@@ -1077,6 +1078,58 @@ class CollectedDataReportData(View, AjaxableResponseMixin):
 
         return JsonResponse(final_dict, safe=False)
 
+def dictfetchall(cursor):
+    "Return all rows from a cursor as a dict"
+    columns = [col[0] for col in cursor.description]
+    return [
+        dict(zip(columns, row))
+        for row in cursor.fetchall()
+    ]
+
+from django.db import connection
+class DisaggregationReport(TemplateView):
+    template_name = 'indicators/disaggregation_report.html'
+
+    def get_context_data(self, **kwargs):
+        context = super(DisaggregationReport, self).get_context_data(**kwargs)
+        disagg_query = "SELECT p.id AS Program, i.id AS IndicatorID, l.label AS Disaggregation, "\
+            "SUM(dv.value) AS Actuals "\
+                "FROM indicators_collecteddata_disaggregation_value AS cdv "\
+                "INNER JOIN indicators_collecteddata AS c ON c.id = cdv.collecteddata_id "\
+                "INNER JOIN indicators_indicator AS i ON i.id = c.indicator_id "\
+                "INNER JOIN indicators_indicator_program AS ip ON ip.indicator_id = i.id "\
+                "INNER JOIN workflow_program AS p ON p.id = ip.program_id "\
+                "INNER JOIN indicators_disaggregationvalue AS dv ON dv.id = cdv.disaggregationvalue_id "\
+                "INNER JOIN indicators_disaggregationlabel AS l ON l.id = dv.disaggregation_label_id "\
+                "WHERE p.id = 442 "\
+                "GROUP BY Program, IndicatorID, Disaggregation "\
+                "ORDER BY IndicatorID, Disaggregation;"
+        cursor = connection.cursor()
+        cursor.execute(disagg_query)
+        disdata = dictfetchall(cursor)
+
+
+        indicator_query = "SELECT DISTINCT i.id AS IndicatorID, i.name AS Indicator, "\
+            "SUM(cd.achieved) AS Overall "\
+            "FROM indicators_indicator AS i "\
+            "INNER JOIN indicators_indicator_program AS ip ON ip.indicator_id = i.id "\
+            "INNER JOIN workflow_program AS p ON p.id = ip.program_id "\
+            "LEFT OUTER JOIN indicators_collecteddata AS cd ON i.id = cd.indicator_id "\
+            "WHERE p.id = 442 "\
+            "GROUP BY IndicatorID "\
+            "ORDER BY Indicator ";
+
+        cursor.execute(indicator_query)
+        idata = dictfetchall(cursor)
+
+        for indicator in idata:
+            indicator["disdata"] = []
+            for i, dis in enumerate(disdata):
+                if dis['IndicatorID'] == indicator['IndicatorID']:
+                    indicator["disdata"].append(disdata[i])
+
+        context['data'] = idata
+        return context
 
 class TVAReport(TemplateView):
     template_name = 'indicators/tva_report.html'
@@ -1100,7 +1153,8 @@ class TVAReport(TemplateView):
             .select_related('sector')\
             .prefetch_related('indicator_type', 'level', 'program')\
             .filter(**filters)\
-            .annotate(actuals=Sum('collecteddata__disaggregation_value__value'))
+            .annotate(actuals=Sum('collecteddata__achieved'))
+            #.annotate(actuals=Sum('collecteddata__disaggregation_value__value'))
         context['data'] = indicators
         context['getIndicators'] = Indicator.objects.filter(program__country__in=countries).exclude(collecteddata__isnull=True)
         context['getPrograms'] = Program.objects.filter(funding_status="Funded", country__in=countries).distinct()
