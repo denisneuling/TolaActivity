@@ -1,3 +1,6 @@
+import operator
+import unicodedata
+
 from django.views.generic.edit import CreateView, UpdateView, DeleteView
 from django.views.generic.list import ListView
 from django.views.generic.detail import DetailView
@@ -351,7 +354,7 @@ class ProjectAgreementUpdate(UpdateView):
         country = getProgram.country
 
         #convert form field unicode project name to ascii safe string for email content
-        import unicodedata
+
         project_name = unicodedata.normalize('NFKD', form.instance.project_name).encode('ascii','ignore')
         #check to see if the approval status has changed
         if str(is_approved) == "approved" and check_agreement_status.approval != "approved":
@@ -720,11 +723,17 @@ class ProjectCompleteDetail(DetailView):
         context.update({'id':self.kwargs['pk']})
 
         try:
-            getBenchmark = Benchmarks.objects.filter(Q(agreement__id=self.kwargs['pk']) | Q(complete__id=self.get_object().pk))
+            q_list = [Q(agreement__id=self.kwargs['pk'])]
+            if self.get_object():
+                q_list.append(Q(complete__id=self.get_object().pk))
+            getBenchmark = Benchmarks.objects.filter(reduce(operator.or_, q_list))
         except Benchmarks.DoesNotExist:
             getBenchmark = None
 
-        budgetContribs = getBudget = Budget.objects.filter(Q(agreement__id=self.kwargs['pk']) | Q(complete__id=self.get_object().pk))
+        q_list = [Q(agreement__id=self.kwargs['pk']) ]
+        if self.get_object():
+            q_list.append( Q(complete__id=self.get_object().pk))
+        budgetContribs = Budget.objects.filter(reduce(operator.or_, q_list))
 
         context['budgetContribs'] = budgetContribs
         context['getBenchmarks'] =  getBenchmark

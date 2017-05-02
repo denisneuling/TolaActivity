@@ -1,7 +1,8 @@
 from django.db import models
 from django.contrib import admin
 from workflow.models import Program, Sector, SiteProfile, ProjectAgreement, ProjectComplete, Country, Office, Documentation, TolaUser
-from datetime import datetime
+from datetime import datetime, timedelta
+from django.utils import timezone
 import uuid
 from simple_history.models import HistoricalRecords
 from decimal import Decimal
@@ -136,6 +137,7 @@ class DisaggregationTypeAdmin(admin.ModelAdmin):
 class DisaggregationLabel(models.Model):
     disaggregation_type = models.ForeignKey(DisaggregationType)
     label = models.CharField(max_length=765, blank=True)
+    customsort = models.IntegerField(blank=True, null=True)
     create_date = models.DateTimeField(null=True, blank=True)
     edit_date = models.DateTimeField(null=True, blank=True)
 
@@ -144,7 +146,7 @@ class DisaggregationLabel(models.Model):
 
 
 class DisaggregationLabelAdmin(admin.ModelAdmin):
-    list_display = ('disaggregation_type','label',)
+    list_display = ('disaggregation_type', 'customsort', 'label',)
     display = 'Disaggregation Label'
     list_filter = ('disaggregation_type__disaggregation_type',)
 
@@ -273,6 +275,12 @@ class Indicator(models.Model):
             self.create_date = datetime.now()
         self.edit_date = datetime.now()
         super(Indicator, self).save(*args, **kwargs)
+
+    @property
+    def just_created(self):
+        if self.create_date >= timezone.now() - timedelta(minutes=5):
+            return True
+        return False
 
     @property
     def name_clean(self):
