@@ -158,6 +158,8 @@ class ProjectAgreementForm(forms.ModelForm):
     documentation_government_approval = forms.CharField(help_text="Check the box if there IS documentation to show government request for or approval of the project. This should be attached to the proposal, and also kept in the program file.", widget=forms.Textarea, required=False)
     description_of_community_involvement = forms.CharField(help_text="How the community is involved in the planning, approval, or implementation of this project should be described. Indicate their approval (copy of a signed MOU, or their signed Project Prioritization request, etc.). But also describe how they will be involved in the implementation - supplying laborers, getting training, etc.", widget=forms.Textarea, required=False)
 
+    program2 =  forms.CharField( widget=forms.TextInput(attrs={'readonly':'readonly'}) )
+
     approval = forms.ChoiceField(
         choices=APPROVALS,
         initial='in progress',
@@ -184,7 +186,7 @@ class ProjectAgreementForm(forms.ModelForm):
             HTML("""<br/>"""),
             TabHolder(
                 Tab('Executive Summary',
-                    Fieldset('Project Details', 'activity_code','account_code','lin_code','office', 'sector','program', 'project_name', 'project_activity',
+                    Fieldset('Project Details', 'program', 'program2', 'activity_code','account_code','lin_code','office', 'sector', 'project_name', 'project_activity',
                              'project_type', 'site','stakeholder','mc_staff_responsible','expected_start_date','expected_end_date',
                         ),
                     ),
@@ -414,7 +416,12 @@ class ProjectAgreementForm(forms.ModelForm):
 
         #override the program queryset to use request.user for country
         countries = getCountry(self.request.user)
-        self.fields['program'].queryset = Program.objects.filter(funding_status="Funded", country__in=countries).distinct()
+        #self.fields['program'].queryset = Program.objects.filter(funding_status="Funded", country__in=countries).distinct()
+
+        self.fields['program'].widget = forms.HiddenInput()
+        self.fields['program2'].initial = self.instance.program
+        self.fields['program2'].label = "Program"
+
         self.fields['approved_by'].queryset = TolaUser.objects.filter(country__in=countries).distinct()
         self.fields['estimated_by'].queryset = TolaUser.objects.filter(country__in=countries).distinct()
         self.fields['reviewed_by'].queryset = TolaUser.objects.filter(country__in=countries).distinct()
@@ -476,6 +483,8 @@ class ProjectAgreementSimpleForm(forms.ModelForm):
     documentation_government_approval = forms.CharField(help_text="Check the box if there IS documentation to show government request for or approval of the project. This should be attached to the proposal, and also kept in the program file.", widget=forms.Textarea, required=False)
     description_of_community_involvement = forms.CharField(help_text="How the community is involved in the planning, approval, or implementation of this project should be described. Indicate their approval (copy of a signed MOU, or their signed Project Prioritization request, etc.). But also describe how they will be involved in the implementation - supplying laborers, getting training, etc.", widget=forms.Textarea, required=False)
 
+    program2 =  forms.CharField( widget=forms.TextInput(attrs={'readonly':'readonly'}) )
+
     approval = forms.ChoiceField(
         choices=APPROVALS,
         initial='in progress',
@@ -502,7 +511,7 @@ class ProjectAgreementSimpleForm(forms.ModelForm):
             HTML("""<br/>"""),
             TabHolder(
                 Tab('Executive Summary',
-                    Fieldset('Project Details', 'activity_code','office', 'sector','program', 'project_name',
+                    Fieldset('Project Details', 'program', 'program2', 'activity_code','office', 'sector', 'project_name',
                              'site','stakeholder','expected_start_date','expected_end_date',
                         ),
 
@@ -660,7 +669,11 @@ class ProjectAgreementSimpleForm(forms.ModelForm):
 
         #override the program queryset to use request.user for country
         countries = getCountry(self.request.user)
-        self.fields['program'].queryset = Program.objects.filter(funding_status="Funded", country__in=countries).distinct()
+        #self.fields['program'].queryset = Program.objects.filter(funding_status="Funded", country__in=countries).distinct()
+        self.fields['program'].widget = forms.HiddenInput()
+        self.fields['program2'].initial = self.instance.program
+        self.fields['program2'].label = "Program"
+
         self.fields['approved_by'].queryset = TolaUser.objects.filter(country__in=countries).distinct()
         self.fields['reviewed_by'].queryset = TolaUser.objects.filter(country__in=countries).distinct()
         self.fields['estimated_by'].queryset = TolaUser.objects.filter(country__in=countries).distinct()
@@ -721,7 +734,7 @@ class ProjectCompleteCreateForm(forms.ModelForm):
             HTML("""<br/>"""),
             TabHolder(
                 Tab('Executive Summary',
-                    Fieldset('Program', 'program2', 'program', 'project_agreement2', 'project_agreement', 'activity_code', 'office', 'sector', 'project_name','site','stakeholder',
+                    Fieldset('Program', 'program2', 'program', 'project_agreement2', 'project_agreement', 'activity_code', 'office', 'sector', 'project_name', 'estimated_budget', 'site','stakeholder',
                     ),
                     Fieldset(
                         'Dates',
@@ -744,7 +757,9 @@ class ProjectCompleteCreateForm(forms.ModelForm):
         self.fields['stakeholder'].queryset = Stakeholder.objects.filter(country__in=countries)
         self.fields['program2'].initial = kwargs['initial'].get('program')
         self.fields['program'].widget = forms.HiddenInput()
+        self.fields['program2'].label = "Program"
         self.fields['project_agreement2'].initial = "%s - %s" % (kwargs['initial'].get('office'),  kwargs['initial'].get('project_name', 'No project name') )
+        self.fields['project_agreement2'].label = "Project Initiation"
         self.fields['project_agreement'].widget = forms.HiddenInput()
         #override the office queryset to use request.user for country
         self.fields['office'].queryset = Office.objects.filter(province__country__in=countries)
@@ -766,7 +781,8 @@ class ProjectCompleteForm(forms.ModelForm):
     actual_cost_date = forms.DateField(widget=DatePicker.DateInput(), required=False)
     exchange_rate_date = forms.DateField(widget=DatePicker.DateInput(), required=False)
 
-    program = forms.ModelChoiceField(queryset=Program.objects.filter(funding_status="Funded"))
+    program2 =  forms.CharField( widget=forms.TextInput(attrs={'readonly':'readonly'}) )
+    project_agreement2 = forms.CharField( widget=forms.TextInput(attrs={'readonly': 'readonly'}))
 
     approval = forms.ChoiceField(
         choices=APPROVALS,
@@ -797,7 +813,7 @@ class ProjectCompleteForm(forms.ModelForm):
             HTML("""<br/>"""),
             TabHolder(
                 Tab('Executive Summary',
-                    Fieldset('', 'program', 'project_agreement', 'activity_code','account_code','lin_code',\
+                    Fieldset('', 'program', 'program2', 'project_agreement', 'project_agreement2', 'activity_code','account_code','lin_code',\
                              'office', 'sector','project_name', 'project_activity', 'site', 'stakeholder',
                         ),
                     Fieldset(
@@ -994,7 +1010,16 @@ class ProjectCompleteForm(forms.ModelForm):
 
         # override the program queryset to use request.user for country
         countries = getCountry(self.request.user)
-        self.fields['program'].queryset = Program.objects.filter(funding_status="Funded", country__in=countries)
+        #self.fields['program'].queryset = Program.objects.filter(funding_status="Funded", country__in=countries)
+        self.fields['program'].widget = forms.HiddenInput()
+        self.fields['program2'].initial = self.instance.program
+        self.fields['program2'].label = "Program"
+
+        #self.fields['project_agreement'].queryset = ProjectAgreement.objects.filter(program__country__in = countries)
+        self.fields['project_agreement'].widget = forms.HiddenInput() #TextInput()
+        self.fields['project_agreement2'].initial = self.instance.project_agreement
+        self.fields['project_agreement2'].label = "Project Initiation"
+
         self.fields['approved_by'].queryset = TolaUser.objects.filter(country__in=countries).distinct()
 
         # override the office queryset to use request.user for country
@@ -1038,7 +1063,8 @@ class ProjectCompleteSimpleForm(forms.ModelForm):
     actual_start_date = forms.DateField(widget=DatePicker.DateInput(), required=False)
     actual_end_date = forms.DateField(widget=DatePicker.DateInput(), required=False)
 
-    program = forms.ModelChoiceField(queryset=Program.objects.filter(funding_status="Funded"))
+    program2 =  forms.CharField( widget=forms.TextInput(attrs={'readonly':'readonly'}) )
+    project_agreement2 = forms.CharField( widget=forms.TextInput(attrs={'readonly': 'readonly'}))
 
     approval = forms.ChoiceField(
         choices=APPROVALS,
@@ -1069,7 +1095,7 @@ class ProjectCompleteSimpleForm(forms.ModelForm):
             TabHolder(
                 Tab('Executive Summary',
                     Fieldset('Program',
-                        'project_agreement', 'activity_code', 'office', 'sector','project_name','site','stakeholder'
+                        'program', 'program2', 'project_agreement', 'project_agreement2', 'activity_code', 'office', 'sector','project_name','site','stakeholder'
                     ),
                     Fieldset('Dates',
                         'expected_start_date','expected_end_date', 'actual_start_date', 'actual_end_date',
@@ -1236,8 +1262,17 @@ class ProjectCompleteSimpleForm(forms.ModelForm):
 
         # override the program queryset to use request.user for country
         countries = getCountry(self.request.user)
-        self.fields['program'].queryset = Program.objects.filter(funding_status="Funded", country__in=countries)
+
+        #self.fields['program'].queryset = Program.objects.filter(funding_status="Funded", country__in=countries)
+        self.fields['program'].widget = forms.HiddenInput()
+        self.fields['program2'].initial = self.instance.program
+        self.fields['program2'].label = "Program"
+
         #self.fields['project_agreement'].queryset = ProjectAgreement.objects.filter(program__country__in = countries)
+        self.fields['project_agreement'].widget = forms.HiddenInput() #TextInput()
+        self.fields['project_agreement2'].initial = self.instance.project_agreement
+        self.fields['project_agreement2'].label = "Project Initiation"
+
         self.fields['approved_by'].queryset = TolaUser.objects.filter(country__in=countries).distinct()
 
         # override the office queryset to use request.user for country
@@ -1603,7 +1638,7 @@ class StakeholderForm(forms.ModelForm):
             TabHolder(
                 Tab('Details',
                     Fieldset('Details',
-                        'name', 'type', 'contact', HTML("""<a onclick="window.open('/workflow/contact_add/0/').focus();">Add New Contact</a>"""), 'country', 'sectors', PrependedText('stakeholder_register',''), 'formal_relationship_document', 'vetting_document', 'notes',
+                        'name', 'type', 'contact', HTML("""<a onclick="window.open('/workflow/contact_add/%s/0/').focus();">Add New Contact</a>""" % kwargs['instance'].pk ), 'country', 'sectors', PrependedText('stakeholder_register',''), 'formal_relationship_document', 'vetting_document', 'notes',
                     ),
                 ),
 
@@ -1614,7 +1649,6 @@ class StakeholderForm(forms.ModelForm):
                 ),
             ),
         )
-
         super(StakeholderForm, self).__init__(*args, **kwargs)
 
         countries = getCountry(self.request.user)

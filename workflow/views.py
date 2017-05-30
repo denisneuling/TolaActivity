@@ -452,7 +452,7 @@ class ProjectAgreementDelete(DeleteView):
     Project Agreement Delete
     """
     model = ProjectAgreement
-    success_url = 'workflow/dashboard/0/'
+    success_url = '/workflow/dashboard/0/'
 
     @method_decorator(group_required('Country',url='workflow/permission'))
     def dispatch(self, request, *args, **kwargs):
@@ -1509,6 +1509,7 @@ class ContactCreate(CreateView):
     Contact Form
     """
     model = Contact
+    stakeholder_id = None
 
     @method_decorator(group_excluded('ViewOnly', url='workflow/permission'))
     def dispatch(self, request, *args, **kwargs):
@@ -1521,6 +1522,7 @@ class ContactCreate(CreateView):
     def get_context_data(self, **kwargs):
         context = super(ContactCreate, self).get_context_data(**kwargs)
         context.update({'id': self.kwargs['id']})
+        context.update({'stakeholder_id': self.kwargs['stakeholder_id']})
         return context
 
     def get_initial(self):
@@ -1542,7 +1544,7 @@ class ContactCreate(CreateView):
         form.save()
         messages.success(self.request, 'Success, Contact Created!')
         latest = Contact.objects.latest('id')
-        redirect_url = '/workflow/contact_update/' + str(latest.id)
+        redirect_url = '/workflow/contact_update/' + self.kwargs['stakeholder_id'] + '/' + str(latest.id)
         return HttpResponseRedirect(redirect_url)
 
     form_class = ContactForm
@@ -1565,6 +1567,7 @@ class ContactUpdate(UpdateView):
     def get_context_data(self, **kwargs):
         context = super(ContactUpdate, self).get_context_data(**kwargs)
         context.update({'id': self.kwargs['pk']})
+        context.update({'stakeholder_id': self.kwargs['stakeholder_id']})
         return context
 
     def form_invalid(self, form):
@@ -2326,9 +2329,9 @@ def export_stakeholders_list(request, **kwargs):
     countries = getCountry(request.user)
 
     if program_id != 0:
-        getStakeholders = Stakeholder.objects.all().filter(projectagreement__program__id=program_id).distinct()
+        getStakeholders = Stakeholder.objects.prefetch_related('sector').filter(projectagreement__program__id=program_id).distinct()
     else:
-        getStakeholders = Stakeholder.objects.all().filter(country__in=countries)
+        getStakeholders = Stakeholder.objects.prefetch_related('sector').filter(country__in=countries)
 
     dataset = StakeholderResource().export(getStakeholders)
     response = HttpResponse(dataset.csv, content_type='application/ms-excel')
